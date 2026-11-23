@@ -152,7 +152,25 @@ app.post('/api/admin/nurse-roster',adm,wrap(async(req,res)=>{
 app.delete('/api/admin/nurse-roster/:id',adm,wrap(async(req,res)=>{await Q('DELETE FROM nurse_duty WHERE duty_id=?',[req.params.id]);res.json({ok:true})}));
 
 async function init(){
+  // 1. Run base tables schema
   await db.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
+
+  // 2. Safely add columns if they don't exist yet
+  try {
+    await db.query('ALTER TABLE lab_results ADD COLUMN test_time TIME NULL');
+  } catch (e) {
+    // Column likely already exists, ignore error
+  }
+
+  try {
+    await db.query("ALTER TABLE lab_results MODIFY test_status ENUM('Pending','Processing','Completed','Cancelled') DEFAULT 'Pending'");
+  } catch (e) {}
+
+  try {
+    await db.query('ALTER TABLE users ADD COLUMN full_name VARCHAR(100) NULL');
+  } catch (e) {}
+
+  // 3. Seed default accounts
   const mk=async(u,p,role,ref)=>{if(!(await Q('SELECT 1 FROM users WHERE username=?',[u])).length)await Q('INSERT INTO users(username,password_hash,role,ref_id) VALUES(?,?,?,?)',[u,await bcrypt.hash(p,10),role,ref])};
   await mk('admin',process.env.ADMIN_PASSWORD||'admin12345','admin',null);
   await mk('lab',process.env.LAB_PASSWORD||'lab12345','lab',1);
